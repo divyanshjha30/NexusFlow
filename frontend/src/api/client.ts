@@ -194,16 +194,53 @@ export const api = {
     }
   },
 
-  async chat(message: string, conversationId: string | null) {
+  /**
+   * Streams the assistant reply token by token. Falls back to replaying the
+   * demo answer at a typing cadence when the backend is unreachable.
+   */
+  async chatStream(
+    message: string,
+    conversationId: string | null,
+    documentIds: string[],
+    onToken: (chunk: string) => void,
+  ): Promise<ChatMessageDto> {
     try {
-      return await request<ChatMessageDto>("/ai/chat", {
+      const res = await fetch(`${BASE_URL}/ai/chat/stream`, {
         method: "POST",
-        body: JSON.stringify({ message, conversationId, documentIds: [] }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, conversationId, documentIds }),
       });
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      setOffline(false);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let text = "";
+      let done = false;
+      while (!done) {
+        const chunk = await reader.read();
+        done = chunk.done;
+        if (chunk.value) {
+          const piece = decoder.decode(chunk.value, { stream: true });
+          text += piece;
+          onToken(piece);
+        }
+      }
+      return {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: text,
+        createdAt: new Date().toISOString(),
+      };
     } catch {
       setOffline(true);
-      await new Promise((r) => setTimeout(r, 600));
-      return MOCK_CHAT_REPLY(message);
+      const reply = MOCK_CHAT_REPLY(message);
+      const words = reply.content.split(" ");
+      for (const word of words) {
+        await new Promise((r) => setTimeout(r, 18));
+        onToken(`${word} `);
+      }
+      return reply;
     }
   },
 };

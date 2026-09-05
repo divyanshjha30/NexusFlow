@@ -8,6 +8,9 @@ const TITLES: Record<string, string> = {
   "/archive": "Archive",
   "/chat": "AI Chat",
   "/clouds": "Cloud Topology",
+  "/activity": "Activity",
+  "/costs": "Costs",
+  "/compare": "Compare",
   "/settings": "Settings",
 };
 

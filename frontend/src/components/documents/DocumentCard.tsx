@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Check, Download, Share2 } from "lucide-react";
+import { Check, Download, Share2, Eye } from "lucide-react";
 import type { CloudProvider, DocumentDto } from "@/types";
 import { formatBytes, formatDate, cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
@@ -20,12 +20,14 @@ interface DocumentCardProps {
   document: DocumentDto;
   selected?: boolean;
   onToggleSelect?: () => void;
+  onQuickLook?: () => void;
 }
 
 export function DocumentCard({
   document: doc,
   selected = false,
   onToggleSelect,
+  onQuickLook,
 }: Readonly<DocumentCardProps>) {
   return (
     <div
@@ -106,6 +108,16 @@ export function DocumentCard({
         </span>
 
         <div className="absolute bottom-3 right-3 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          {onQuickLook && (
+            <button
+              type="button"
+              aria-label="Quick look"
+              onClick={onQuickLook}
+              className="rounded p-1 text-content-muted hover:bg-surface-raised hover:text-content-primary"
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             type="button"
             aria-label="Download"

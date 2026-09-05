@@ -1,0 +1,87 @@
+package com.nexusflow.storage.service;
+
+import com.nexusflow.common.exception.NexusFlowException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
+import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
+
+import java.io.IOException;
+import java.io.InputStream;
+
+@Service
+public class S3StorageService {
+
+    private static final Logger log = LoggerFactory.getLogger(S3StorageService.class);
+
+    private final S3Client s3;
+    private final String bucket;
+
+    public S3StorageService(S3Client s3, @Value("${nexusflow.aws.bucket}") String bucket) {
+        this.s3 = s3;
+        this.bucket = bucket;
+    }
+
+    public String upload(String key, String contentType, long size, InputStream body) {
+        ensureBucket();
+        try {
+            s3.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(bucket)
+                            .key(key)
+                            .contentType(contentType)
+                            .build(),
+                    RequestBody.fromInputStream(body, size));
+            return key;
+        } catch (S3Exception e) {
+            throw new NexusFlowException("S3_UPLOAD_FAILED", "Could not upload " + key, e);
+        }
+    }
+
+    public String publicUrl(String key) {
+        return "%s/%s/%s".formatted(s3.serviceClientConfiguration().endpointOverride()
+                .map(java.net.URI::toString).orElse(""), bucket, key);
+    }
+
+    public long objectCount() {
+        try {
+            return s3.listObjectsV2(ListObjectsV2Request.builder().bucket(bucket).build())
+                    .keyCount();
+        } catch (S3Exception e) {
+            log.debug("Could not count objects in {}: {}", bucket, e.getMessage());
+            return 0;
+        }
+    }
+
+    private void ensureBucket() {
+        try {
+            s3.headBucket(HeadBucketRequest.builder().bucket(bucket).build());
+        } catch (NoSuchBucketException e) {
+            log.info("Creating missing bucket {}", bucket);
+            s3.createBucket(CreateBucketRequest.builder().bucket(bucket).build());
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                s3.createBucket(CreateBucketRequest.builder().bucket(bucket).build());
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    /** Reads the stream fully so the size is known before the SDK call. */
+    public static byte[] readAll(InputStream in) {
+        try (in) {
+            return in.readAllBytes();
+        } catch (IOException e) {
+            throw new NexusFlowException("FILE_READ_FAILED", "Could not read upload", e);
+        }
+    }
+}

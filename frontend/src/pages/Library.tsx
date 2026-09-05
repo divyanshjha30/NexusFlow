@@ -1,13 +1,25 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { LayoutGrid, List, Search, X, FileSearch } from "lucide-react";
+import {
+  LayoutGrid,
+  List,
+  Search,
+  X,
+  FileSearch,
+  BookmarkPlus,
+} from "lucide-react";
 import { api } from "@/api/client";
 import { DocumentCard } from "@/components/documents/DocumentCard";
 import { DocumentRow } from "@/components/documents/DocumentRow";
 import { BulkActionBar } from "@/components/documents/BulkActionBar";
+import { QuickLookDrawer } from "@/components/documents/QuickLookDrawer";
+import { ShareModal } from "@/components/documents/ShareModal";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { VirtualList } from "@/components/ui/VirtualList";
+import { useSavedViewsStore } from "@/stores/savedViewsStore";
+import { toast } from "@/stores/toastStore";
 import { cn } from "@/lib/utils";
 import type {
   DocumentDto,
@@ -39,11 +51,13 @@ function DocumentResults({
   view,
   selected,
   onToggle,
+  onQuickLook,
 }: Readonly<{
   documents: DocumentDto[];
   view: "grid" | "list";
   selected: string[];
   onToggle: (id: string) => void;
+  onQuickLook: (doc: DocumentDto) => void;
 }>) {
   if (documents.length === 0) {
     return (
@@ -64,6 +78,7 @@ function DocumentResults({
             document={doc}
             selected={selected.includes(doc.id)}
             onToggleSelect={() => onToggle(doc.id)}
+            onQuickLook={() => onQuickLook(doc)}
           />
         ))}
       </div>
@@ -80,9 +95,13 @@ function DocumentResults({
         <span>Date</span>
         <span className="text-right">AI</span>
       </div>
-      {documents.map((doc) => (
-        <DocumentRow key={doc.id} document={doc} />
-      ))}
+      <VirtualList
+        items={documents}
+        rowHeight={45}
+        height={Math.min(documents.length * 45, 560)}
+        getKey={(doc) => doc.id}
+        renderRow={(doc) => <DocumentRow document={doc} />}
+      />
     </div>
   );
 }
@@ -103,10 +122,19 @@ export function Library({
     archived,
   });
 
+  const [quickLook, setQuickLook] = useState<DocumentDto | null>(null);
+  const [sharing, setSharing] = useState<DocumentDto | null>(null);
+  const saveView = useSavedViewsStore((s) => s.save);
+
+  // Saved views round-trip through the URL, so restore every filter from it.
   useEffect(() => {
     setFilters((f) => ({
       ...f,
       search: params.get("q") ?? "",
+      type: (params.get("type") as DocumentType | null) ?? "ALL",
+      cloud: (params.get("cloud") as CloudProvider | null) ?? "ALL",
+      sort: params.get("sort") ?? "createdAt",
+      direction: (params.get("dir") as "asc" | "desc" | null) ?? "desc",
       archived,
       page: 0,
     }));
@@ -141,33 +169,55 @@ export function Library({
           </p>
         </div>
 
-        <div className="flex items-center gap-1 rounded-lg border border-edge p-0.5">
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setView("grid")}
-            className={cn(
-              "rounded p-1.5",
-              view === "grid"
-                ? "bg-surface-raised text-brand-light"
-                : "text-content-muted",
-            )}
-            aria-label="Grid view"
+            onClick={() => {
+              const name = window.prompt("Name this view", "My view");
+              if (!name?.trim()) return;
+              saveView(name.trim(), {
+                search: filters.search,
+                type: filters.type,
+                cloud: filters.cloud,
+                sort: filters.sort,
+                direction: filters.direction,
+                archived: filters.archived,
+              });
+              toast.success("View saved", "Pinned to the sidebar.");
+            }}
+            className="btn-ghost"
           >
-            <LayoutGrid className="h-4 w-4" />
+            <BookmarkPlus className="h-3.5 w-3.5" /> Save view
           </button>
-          <button
-            type="button"
-            onClick={() => setView("list")}
-            className={cn(
-              "rounded p-1.5",
-              view === "list"
-                ? "bg-surface-raised text-brand-light"
-                : "text-content-muted",
-            )}
-            aria-label="List view"
-          >
-            <List className="h-4 w-4" />
-          </button>
+
+          <div className="flex items-center gap-1 rounded-lg border border-edge p-0.5">
+            <button
+              type="button"
+              onClick={() => setView("grid")}
+              className={cn(
+                "rounded p-1.5",
+                view === "grid"
+                  ? "bg-surface-raised text-brand-light"
+                  : "text-content-muted",
+              )}
+              aria-label="Grid view"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("list")}
+              className={cn(
+                "rounded p-1.5",
+                view === "list"
+                  ? "bg-surface-raised text-brand-light"
+                  : "text-content-muted",
+              )}
+              aria-label="List view"
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -273,6 +323,7 @@ export function Library({
             s.includes(id) ? s.filter((x) => x !== id) : [...s, id],
           )
         }
+        onQuickLook={setQuickLook}
       />
 
       {data && data.totalPages > 1 && (
@@ -300,6 +351,16 @@ export function Library({
       )}
 
       <BulkActionBar count={selected.length} onClear={() => setSelected([])} />
+
+      <QuickLookDrawer
+        document={quickLook}
+        onClose={() => setQuickLook(null)}
+        onShare={(doc) => {
+          setQuickLook(null);
+          setSharing(doc);
+        }}
+      />
+      <ShareModal document={sharing} onClose={() => setSharing(null)} />
     </div>
   );
 }

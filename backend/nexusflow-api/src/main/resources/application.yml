@@ -13,9 +13,30 @@ spring:
     enabled: true
     baseline-on-migrate: true
     locations: classpath:db/migration
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 105MB
 
 server:
   port: ${SERVER_PORT:8080}
+
+nexusflow:
+  aws:
+    endpoint: ${AWS_ENDPOINT:http://dj-pc:4566}
+    region: ${AWS_REGION:us-east-1}
+    access-key: ${AWS_ACCESS_KEY_ID:test}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:test}
+    bucket: ${S3_BUCKET_NAME:nexusflow-documents}
+  azure:
+    endpoint: ${AZURE_STORAGE_ENDPOINT:http://dj-pc:4577}
+  gcp:
+    endpoint: ${GCP_ENDPOINT:http://dj-pc:4588}
+  oci:
+    endpoint: ${OCI_ENDPOINT:http://dj-pc:4599}
+  ollama:
+    base-url: ${OLLAMA_BASE_URL:http://dj-pc:11434}
+    model: ${OLLAMA_MODEL:llama3.2}
 
 management:
   endpoints:

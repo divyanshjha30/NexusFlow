@@ -18,6 +18,7 @@ public record DocumentDto(
         String sentiment,
         Double confidenceScore,
         StorageLocationsDto storageLocations,
+        String extractedText,
         Instant createdAt,
         Instant updatedAt) {
 }

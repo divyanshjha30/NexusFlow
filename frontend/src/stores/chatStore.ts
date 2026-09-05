@@ -9,6 +9,7 @@ interface ChatStore {
   sending: boolean;
   toggleDocument: (id: string) => void;
   clearSelection: () => void;
+  reset: () => void;
   send: (message: string) => Promise<void>;
 }
 
@@ -27,6 +28,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   clearSelection: () => set({ selectedDocumentIds: [] }),
 
+  reset: () => set({ messages: [], conversationId: null }),
+
   async send(message) {
     if (!message.trim() || get().sending) return;
 
@@ -36,11 +39,46 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       content: message,
       createdAt: new Date().toISOString(),
     };
-    set((s) => ({ messages: [...s.messages, userMessage], sending: true }));
 
-    const reply = await api.chat(message, get().conversationId);
+    const streamingId = crypto.randomUUID();
+    const placeholder: ChatMessageDto = {
+      id: streamingId,
+      role: "assistant",
+      content: "",
+      createdAt: new Date().toISOString(),
+      pending: true,
+    };
+
     set((s) => ({
-      messages: [...s.messages, reply],
+      messages: [...s.messages, userMessage, placeholder],
+      sending: true,
+    }));
+
+    const appendToken = (chunk: string) =>
+      set((s) => ({
+        messages: s.messages.map((m) =>
+          m.id === streamingId ? { ...m, content: m.content + chunk } : m,
+        ),
+      }));
+
+    const final = await api.chatStream(
+      message,
+      get().conversationId,
+      get().selectedDocumentIds,
+      appendToken,
+    );
+
+    set((s) => ({
+      messages: s.messages.map((m) =>
+        m.id === streamingId
+          ? {
+              ...m,
+              content: final.content,
+              sources: final.sources,
+              pending: false,
+            }
+          : m,
+      ),
       conversationId: s.conversationId ?? crypto.randomUUID(),
       sending: false,
     }));

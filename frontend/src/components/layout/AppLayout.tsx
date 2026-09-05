@@ -12,6 +12,7 @@ import { CommandPalette } from "@/components/ui/CommandPalette";
 import { ShortcutsDialog } from "@/components/ui/ShortcutsDialog";
 import { Toaster } from "@/components/ui/Toaster";
 import { GlobalDropOverlay } from "@/components/upload/GlobalDropOverlay";
+import { OnboardingTour } from "@/components/onboarding/OnboardingTour";
 
 export function AppLayout() {
   const [offline, setOffline] = useState(isOffline());
@@ -47,6 +48,7 @@ export function AppLayout() {
       <CommandPalette />
       <ShortcutsDialog />
       <GlobalDropOverlay />
+      <OnboardingTour />
       <Toaster />
     </div>
   );
