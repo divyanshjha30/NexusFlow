@@ -12,7 +12,7 @@ and Spring AI as the unifying framework for RAG and chat.
 
 ```yaml
 # application-ai.yml
-# Ollama runs on dj-pc; Spring Boot runs on the Mac.
+# Ollama runs in Docker on dj-pc; Spring Boot runs on the Mac.
 spring:
   ai:
     ollama:
@@ -37,7 +37,7 @@ spring:
 
 Uses Apache Tika (auto-detects format):
 
-```
+```text
 Input                     Tika output          AI can process
 ──────────────────────────────────────────────────────────────
 PDF (text)        →       plain text           ✓ directly
@@ -59,7 +59,7 @@ Sends 500-char excerpt to Vertex AI text classification endpoint.
 
 **Input:**
 
-```
+```text
 Invoice from Acme Corp
 Date: January 15, 2024
 Amount Due: $1,250.00
@@ -89,7 +89,7 @@ Sends up to 8,000 chars of extracted text, gets a 3-sentence summary.
 
 **Prompt:**
 
-```
+```text
 Summarise the following document in exactly 3 sentences.
 Be factual and concise. Include key amounts, dates, and parties involved.
 
@@ -99,7 +99,7 @@ Document:
 
 **Output:**
 
-```
+```text
 Invoice from Acme Corp for web development services totalling $1,250.00,
 dated January 15, 2024. The invoice covers 25 hours at $50/hour for the
 period December 2023. Payment is due within 30 days.
@@ -141,7 +141,7 @@ Sends full extracted text to Comprehend's `DetectEntities` API.
 
 Splits document into chunks (512 tokens, 50 overlap), embeds each chunk.
 
-```
+```text
 Chunk 1: "Invoice from Acme Corp. Date: January 15, 2024..."
 Chunk 2: "Services rendered: web development. 25 hours at $50/hour..."
 Chunk 3: "Payment due within 30 days. Bank details: ..."
@@ -167,7 +167,7 @@ Two indexes updated:
 
 When user sends a chat message:
 
-```
+```text
 User query: "summarise all contracts from last year"
                     ↓
 1. Embed the query: nomic-embed-text → [768-dim vector]
@@ -199,7 +199,7 @@ User query: "summarise all contracts from last year"
 
 Conversations maintained in Redis:
 
-```
+```text
 Key: conversation:{conversationId}
 Value: [{"role":"user","content":"..."}, {"role":"assistant","content":"..."}]
 TTL: 30 minutes
@@ -225,7 +225,7 @@ After entity extraction, auto-tags are generated:
 
 For `image/*` MIME types:
 
-```
+```text
 1. Upload to S3
 2. Call Rekognition DetectText → extract text
 3. Call Rekognition DetectLabels → "Invoice", "Document", "Paper"
@@ -238,7 +238,7 @@ For `image/*` MIME types:
 
 Async — starts a Transcribe job, polls every 30s:
 
-```
+```text
 1. Upload MP3/WAV/MP4 to S3
 2. StartTranscriptionJob → jobName = documentId
 3. Schedule a ScheduledTask to poll GetTranscriptionJob
@@ -291,15 +291,12 @@ public class VertexAiConfig {
 
 ## Ollama setup
 
-Ollama runs on dj-pc as part of the Docker stack. Models needed:
+Ollama runs in Docker on dj-pc under the `ai` compose profile. Models are already pulled:
+`llama3.2` (3.2B) and `nomic-embed-text` (137M).
 
 ```bash
-ollama pull llama3.2          # ~2GB — chat + RAG
-ollama pull nomic-embed-text  # ~274MB — embeddings
+curl http://dj-pc:11434/api/tags   # verify from the Mac
 ```
-
-The `ollama-init` container in `docker-compose.dev.yml` pulls both automatically on
-first start, so this is only needed if you are driving Ollama by hand.
 
 Spring AI config:
 
@@ -307,11 +304,7 @@ Spring AI config:
 spring.ai.ollama.base-url: http://dj-pc:11434
 ```
 
-Verify reachability from the Mac:
-
-```bash
-curl http://dj-pc:11434/api/tags
-```
+Docker on dj-pc exposes only the `runc` runtime, so inference is CPU-only for now.
 
 ---
 
@@ -321,7 +314,7 @@ Stored as resources in `nexusflow-ai/src/main/resources/prompts/`:
 
 **classify.st:**
 
-```
+```text
 Classify the following document into one of these categories:
 INVOICE, CONTRACT, REPORT, RECEIPT, IMAGE, AUDIO, OTHER
 
@@ -333,7 +326,7 @@ Document excerpt:
 
 **summarise.st:**
 
-```
+```text
 Summarise the following document in exactly 3 sentences.
 Focus on: key parties involved, main subject, key dates/amounts.
 Be factual. Do not infer. Do not add information not in the document.
@@ -344,7 +337,7 @@ Document:
 
 **chat-system.st:**
 
-```
+```text
 You are NexusFlow Assistant, an AI that helps users understand their documents.
 
 Rules:

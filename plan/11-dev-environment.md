@@ -23,7 +23,7 @@ It works by running local HTTP servers that implement the same APIs as the real 
 
 ### floci services available
 
-```
+```text
 AWS  (port 4566):  S3, SQS, SNS, DynamoDB, Lambda, Cognito, KMS, Secrets Manager,
                     Step Functions, EventBridge, Bedrock, Comprehend, Rekognition,
                     Transcribe, CloudWatch, MSK (Kafka), IAM, SSM, Athena, S3 Vectors
@@ -40,7 +40,7 @@ OCI  (port 4599):  Object Storage, Streaming, Queue, Autonomous Database, Vault,
 
 ### floci UI dashboard
 
-floci includes a web UI at **http://dj-pc:4500** that shows:
+floci includes a web UI at **<http://dj-pc:4500>** that shows:
 
 - Which emulators are running and healthy
 - Buckets, queues, topics, and other resources you've created
@@ -60,7 +60,7 @@ floci includes a web UI at **http://dj-pc:4500** that shows:
 
 ### Mac `~/.ssh/config` entry
 
-```
+```text
 Host pc
     HostName dj-pc
     User divya
@@ -71,6 +71,29 @@ Host pc
 ```
 
 Connect with: `ssh pc`
+
+### Running a one-off command over SSH
+
+The `RemoteCommand`/`RequestTTY` lines above make `ssh pc` drop into an interactive
+PowerShell, but they break `ssh pc "<command>"`:
+
+```text
+Cannot execute command-line and remote command.
+```
+
+Override both flags for non-interactive use:
+
+```bash
+ssh -o RemoteCommand=none -o RequestTTY=no pc "docker ps"
+```
+
+Second trap: the remote default shell is `cmd.exe`, which does **not** treat `'` as a
+quote character. `docker ps --format '{{.Names}}'` fails with
+`'{{.Status}}'' is not recognized...`. Drop the inner single quotes:
+
+```bash
+ssh -o RemoteCommand=none -o RequestTTY=no pc "docker ps --format {{.Names}}"
+```
 
 ### How Windows SSH auth works for admins
 
@@ -138,7 +161,7 @@ Docker Desktop → starts at login
 
 When running `docker` commands over SSH, you'll see this error without the fix:
 
-```
+```text
 error getting credentials - err: exec: "docker-credential-desktop": exit status 1
 A specified logon session does not exist.
 ```
@@ -160,11 +183,15 @@ The empty `auths` entry tells Docker CLI to skip the broken credential helper en
 
 ### Running containers (all `restart: always`)
 
-| Container(s)                               | Location            | Ports   | Start command                                    |
-| ------------------------------------------ | ------------------- | ------- | ------------------------------------------------ |
-| Immich (4 containers)                      | `D:\immich-app`     | 2283    | `docker compose up -d`                           |
-| floci-ui                                   | `D:\floci-ui`       | 4500    | `docker compose up -d`                           |
-| NexusFlow infra (Kafka, DB, Redis, Ollama) | `NexusFlow/docker/` | various | `docker compose -f docker-compose.dev.yml up -d` |
+| Container(s)          | Location              | Ports                          | Start command                                    |
+| --------------------- | --------------------- | ------------------------------ | ------------------------------------------------ |
+| Immich (4 containers) | `D:\immich-app`       | 2283                           | `docker compose up -d`                           |
+| floci-ui              | `D:\floci-ui`         | 4500                           | `docker compose up -d`                           |
+| floci emulators (4)   | floci CLI             | 4566, 4577, 4588, 4599         | `floci start` etc.                               |
+| NexusFlow infra       | `D:\nexusflow\docker` | 9092, 26257, 8080, 6379, 11434 | `docker compose -f docker-compose.dev.yml up -d` |
+
+NexusFlow infra = ZooKeeper, Kafka (+UI), CockroachDB, Redis (+Insight) and Ollama.
+Only Spring Boot and the React app run on the Mac.
 
 ### floci-ui docker-compose.yml
 
@@ -241,34 +268,35 @@ Note: Fresh Windows installs block scripts by default. Always use `-ExecutionPol
 ### `~/.zshrc` aliases and exports
 
 ```zsh
-# floci endpoints (for local testing from Mac)
+# floci endpoints
 export FLOCI_AWS=http://dj-pc:4566
 export FLOCI_AZURE=http://dj-pc:4577
 export FLOCI_GCP=http://dj-pc:4588
 export FLOCI_OCI=http://dj-pc:4599
 
-# NexusFlow infra on dj-pc (Spring Boot runs here on the Mac and dials out)
+# NexusFlow infra (also on dj-pc)
 export KAFKA_BOOTSTRAP_SERVERS=dj-pc:9092
 export DB_URL="jdbc:postgresql://dj-pc:26257/nexusflow?sslmode=disable"
 export REDIS_HOST=dj-pc
 export OLLAMA_BASE_URL=http://dj-pc:11434
 
-# Open floci UI dashboard
+# Web UIs
 alias floci-on="open http://dj-pc:4500"
-
-# Other dj-pc web UIs
 alias kafka-ui="open http://dj-pc:8090"
 alias crdb-ui="open http://dj-pc:8080"
 
-# Check PC health (9 running containers)
+# Non-interactive ssh to the PC (see RemoteCommand note above)
+sshpc() { ssh -o RemoteCommand=none -o RequestTTY=no pc "$@"; }
+
+# Check PC health
 pc-health() {
-  ssh pc "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
+  sshpc "docker ps --format {{.Names}}"
 }
 
-# Verify every backing service is reachable before starting Spring Boot
+# Is everything the backend needs reachable?
 nf-check() {
   for p in 4566 4577 4588 4599 9092 26257 6379 11434; do
-    nc -z -G 2 dj-pc $p && echo "dj-pc:$p OK" || echo "dj-pc:$p DOWN"
+    nc -z -G 2 dj-pc $p >/dev/null 2>&1 && echo "dj-pc:$p OK" || echo "dj-pc:$p DOWN"
   done
 }
 ```
@@ -342,7 +370,7 @@ To survive power cuts without manual intervention, Windows needs to auto-login t
 
 Power recovery chain after auto-login is configured:
 
-```
+```text
 Power restored
     → BIOS (set to "always on after power loss")
     → Windows boots
@@ -358,7 +386,7 @@ Power restored
 
 ## D: drive layout
 
-```
+```text
 D:\
 ├── immich-app\          — Immich photos server
 │   ├── docker-compose.yml

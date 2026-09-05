@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: nexusflow-api
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://dj-pc:26257/nexusflow?sslmode=disable}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 10000
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+logging:
+  level:
+    com.nexusflow: DEBUG

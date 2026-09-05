@@ -390,7 +390,7 @@ Topics:
 ```yaml
 spring:
   kafka:
-    bootstrap-servers: dj-pc:9092 # broker runs on dj-pc; Spring Boot runs on the Mac
+    bootstrap-servers: dj-pc:9092 # broker runs on dj-pc and advertises dj-pc:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer

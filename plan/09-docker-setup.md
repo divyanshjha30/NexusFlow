@@ -1,30 +1,48 @@
 # NexusFlow — Docker Setup
 
-Full local dev stack. Everything runs in Docker (or alongside it via floci CLI).
+Local dev stack. **Everything runs on dj-pc**: the four fake clouds via the floci CLI,
+plus all NexusFlow infrastructure in Docker. Only Spring Boot and the React app run
+on the Mac.
+
+The live compose file is [`docker/docker-compose.dev.yml`](../docker/docker-compose.dev.yml),
+deployed to `D:\nexusflow\docker\` on dj-pc. The YAML below mirrors it.
 
 ---
 
 ## Topology — who runs what
 
-```
-dj-pc (Windows, reachable as `dj-pc` over Tailscale)
-  ├── floci emulators      :4566 :4577 :4588 :4599   (started via floci CLI)
+```text
+Mac (dev machine — code and app only)
+  ├── Spring Boot API      :8080
+  └── Vite dev server      :5173
+
+dj-pc (Windows home server, reachable as `dj-pc` over Tailscale)
+  ├── floci AWS            :4566
+  ├── floci Azure          :4577
+  ├── floci GCP            :4588
+  ├── floci OCI            :4599
   ├── floci UI             :4500
-  └── docker-compose.dev.yml
+  └── D:\nexusflow\docker\docker-compose.dev.yml
         ├── Kafka          :9092   + Kafka UI :8090
         ├── CockroachDB    :26257  + CRDB UI  :8080
         ├── Redis          :6379   + Insight  :5540
-        └── Ollama         :11434
-
-Mac (dev machine — where you write code)
-  ├── Spring Boot API      :8080
-  └── Vite dev server      :5173
+        └── Ollama         :11434  (profile "ai")
 ```
 
 **Everything the Mac talks to is addressed as `dj-pc`, never `localhost`.** The only
-`localhost` services from the Mac's point of view are Spring Boot and Vite, which run
-locally. Because CockroachDB's UI sits on `:8080` on dj-pc and Spring Boot sits on
-`:8080` on the Mac, they are on different hosts and do not collide.
+`localhost` services are Spring Boot and Vite. CockroachDB's UI can stay on `:8080`
+because it is on a different host from Spring Boot.
+
+> **Tailscale is a hard dependency.** With Tailscale down, the backend has no database,
+> no Kafka, no cache and no clouds — Spring Boot will not start. You can still compile
+> and run `mvn install` offline, but not run the app.
+
+Two cross-host consequences to remember:
+
+- Kafka must advertise `dj-pc:9092`. If it advertises `localhost`, the Mac client is
+  told to reconnect to itself and hangs with no useful error.
+- Docker Desktop on dj-pc only starts after a Windows login, so containers can be down
+  even while SSH and Tailscale are reachable.
 
 ---
 
@@ -32,8 +50,9 @@ locally. Because CockroachDB's UI sits on `:8080` on dj-pc and Spring Boot sits 
 
 ```yaml
 # docker/docker-compose.dev.yml
-# Starts all infrastructure needed for local development.
-# floci emulators are started separately via floci CLI (see below).
+# Runs on the Mac. Starts Kafka, CockroachDB, and Redis.
+# Ollama runs natively (brew), NOT here — see topology note above.
+# floci emulators run on dj-pc via the floci CLI.
 
 version: "3.9"
 
@@ -67,8 +86,7 @@ services:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      # Must advertise dj-pc, not localhost — the Mac client connects across the network
-      # and Kafka redirects it to whatever hostname is advertised here.
+      # Advertised as dj-pc so the Mac's client is redirected somewhere reachable.
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://dj-pc:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
@@ -98,7 +116,7 @@ services:
     command: start-single-node --insecure --advertise-addr=cockroachdb
     ports:
       - "26257:26257" # SQL (JDBC)
-      - "8080:8080" # CockroachDB UI
+      - "8080:8080" # CockroachDB admin UI
     volumes:
       - cockroachdb-data:/cockroach/cockroach-data
 
@@ -121,35 +139,6 @@ services:
     restart: always
     ports:
       - "5540:5540"
-
-  # ──────────────────────────────
-  # Ollama (local LLM)
-  # ──────────────────────────────
-  ollama:
-    image: ollama/ollama:latest
-    container_name: nexusflow-ollama
-    restart: always
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-models:/root/.ollama
-    # For GPU: add deploy.resources.reservations.devices
-
-  ollama-init:
-    image: ollama/ollama:latest
-    container_name: nexusflow-ollama-init
-    depends_on:
-      - ollama
-    entrypoint: >
-      /bin/sh -c "
-        sleep 5 &&
-        ollama pull llama3.2 &&
-        ollama pull nomic-embed-text &&
-        echo 'Models ready'
-      "
-    environment:
-      OLLAMA_HOST: http://ollama:11434
-    restart: "no"
 
   # ──────────────────────────────
   # Kafka topic initializer
@@ -201,14 +190,35 @@ volumes:
   kafka-data:
   cockroachdb-data:
   redis-data:
-  ollama-models:
 ```
+
+---
+
+## Ollama setup
+
+Ollama runs in Docker on dj-pc under the `ai` compose profile, so it is not started
+by default. It is first needed at Milestone 6.
+
+```bash
+ssh -o RemoteCommand=none -o RequestTTY=no pc \
+  "cd /d D:\nexusflow\docker && docker compose -f docker-compose.dev.yml --profile ai up -d ollama"
+
+ssh -o RemoteCommand=none -o RequestTTY=no pc "docker exec nexusflow-ollama ollama pull llama3.2"
+ssh -o RemoteCommand=none -o RequestTTY=no pc "docker exec nexusflow-ollama ollama pull nomic-embed-text"
+
+curl http://dj-pc:11434/api/tags   # verify from the Mac
+```
+
+Note: Docker on dj-pc exposes only the `runc` runtime, so Ollama runs CPU-only. Enabling
+the GTX 1660 Ti would need the NVIDIA Container Toolkit plus a `deploy.resources` GPU
+reservation.
 
 ---
 
 ## docker-compose.infra.yml
 
-Lighter version — just infra, no Ollama (for when you want Spring Boot to run outside Docker).
+Lighter version — Kafka, CockroachDB, and Redis with no UI containers, for when you want
+a minimal footprint on the Mac.
 
 ```yaml
 # docker/docker-compose.infra.yml
@@ -233,7 +243,7 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://dj-pc:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
 
@@ -242,7 +252,7 @@ services:
     container_name: nexusflow-cockroachdb
     restart: always
     command: start-single-node --insecure
-    ports: ["26257:26257", "8080:8080"]
+    ports: ["26257:26257", "8081:8080"]
     volumes: [cockroachdb-data:/cockroach/cockroach-data]
 
   redis:
@@ -262,30 +272,28 @@ volumes:
 
 ## Environment variables
 
-Spring Boot runs on the Mac, so every backing service is addressed as `dj-pc`.
-If you ever run Spring Boot _on_ dj-pc instead, swap `dj-pc` → `localhost` throughout.
+See [`.env.dev`](../.env.dev) at the repo root for the live copy, including the real
+resource IDs created in floci.
 
 ```env
-# .env.dev (at repo root, not committed — add to .gitignore)
-
-# Spring Boot (runs locally on the Mac)
+# Spring Boot (Mac)
 SPRING_PROFILES_ACTIVE=dev
 SERVER_PORT=8080
 
-# CockroachDB (on dj-pc)
+# CockroachDB (dj-pc)
 DB_URL=jdbc:postgresql://dj-pc:26257/nexusflow?sslmode=disable
 DB_USERNAME=root
 DB_PASSWORD=
 
-# Redis (on dj-pc)
+# Redis (dj-pc)
 REDIS_HOST=dj-pc
 REDIS_PORT=6379
 REDIS_PASSWORD=nexusflow-dev
 
-# Kafka (on dj-pc — broker must advertise dj-pc:9092, see compose file)
+# Kafka (dj-pc — broker advertises dj-pc:9092)
 KAFKA_BOOTSTRAP_SERVERS=dj-pc:9092
 
-# Ollama (on dj-pc)
+# Ollama (dj-pc)
 OLLAMA_BASE_URL=http://dj-pc:11434
 
 # floci (AWS)
@@ -332,7 +340,7 @@ VITE_REDIRECT_URI=http://localhost:5173/login
 
 ## Port map
 
-### On the Mac
+### On the Mac (`localhost`)
 
 | Port | Service                 |
 | ---- | ----------------------- |
@@ -348,13 +356,13 @@ VITE_REDIRECT_URI=http://localhost:5173/login
 | 4577  | floci-az (Azure emulator) |
 | 4588  | floci-gcp (GCP emulator)  |
 | 4599  | floci-oci (OCI emulator)  |
-| 8080  | CockroachDB UI            |
-| 8090  | Kafka UI                  |
 | 9092  | Kafka broker              |
-| 11434 | Ollama                    |
+| 8090  | Kafka UI                  |
 | 26257 | CockroachDB SQL (JDBC)    |
+| 8080  | CockroachDB admin UI      |
 | 6379  | Redis                     |
 | 5540  | Redis Insight UI          |
+| 11434 | Ollama                    |
 | 2181  | ZooKeeper                 |
 | 2283  | Immich (photos, separate) |
 
@@ -362,36 +370,35 @@ VITE_REDIRECT_URI=http://localhost:5173/login
 
 ## Startup order
 
-```
---- on dj-pc (via `ssh pc`, or sitting at the PC) ---
+Everything on dj-pc is `restart: always`, so after a Windows login the whole stack comes
+back on its own. The steps below are for a cold start or a rebuild.
 
-1. Confirm Docker Desktop is up (it only starts after a Windows login):
-   docker ps
+```text
+--- on dj-pc (via ssh, or sitting at the PC) ---
 
-2. Start floci emulators:
+1. Start the four emulators (once per boot):
    floci start
    floci gcp start
    floci az start
    floci oci start
 
-3. Start infra stack:
-   cd NexusFlow/docker
+2. Start infra (only if not already running):
+   cd /d D:\nexusflow\docker
    docker compose -f docker-compose.dev.yml up -d
-   # Wait ~30s for the init containers to create topics + the database
 
 --- on the Mac ---
 
-4. Verify dj-pc is reachable:
-   curl http://dj-pc:4566/_localstack/health
-   nc -z dj-pc 9092 26257 6379 11434
+3. Confirm dj-pc is reachable (Tailscale must be up):
+   curl -s http://dj-pc:4566/_localstack/health | head -c 200
+   for p in 9092 26257 6379; do nc -z -G 2 dj-pc $p && echo "$p OK"; done
 
-5. Start Spring Boot:
-   mvn spring-boot:run -pl nexusflow-api
+4. Start Spring Boot:
+   mvn -f backend/pom.xml spring-boot:run -pl nexusflow-api
 
-6. Start frontend:
+5. Start frontend:
    cd frontend && npm run dev
 
-7. Open browser:
+6. Open browser:
    http://localhost:5173
 ```
 
@@ -399,35 +406,36 @@ VITE_REDIRECT_URI=http://localhost:5173/login
 
 ## Useful commands
 
-Infra lives on dj-pc, so Docker commands run over SSH from the Mac.
+Infra lives on dj-pc, so Docker commands go over SSH. Note the `-o` flags — see
+[11-dev-environment.md](11-dev-environment.md) for why they are required.
 
 ```bash
-# See all running services
-ssh pc "cd NexusFlow/docker && docker compose -f docker-compose.dev.yml ps"
+# Convenience wrapper (add to ~/.zshrc)
+sshpc() { ssh -o RemoteCommand=none -o RequestTTY=no pc "$@"; }
 
-# View logs for a specific service
-ssh pc "cd NexusFlow/docker && docker compose -f docker-compose.dev.yml logs -f kafka"
+# See all running services
+sshpc "cd /d D:\nexusflow\docker && docker compose -f docker-compose.dev.yml ps"
+
+# Logs for one service
+sshpc "docker logs -f nexusflow-kafka"
 
 # Restart a single service
-ssh pc "cd NexusFlow/docker && docker compose -f docker-compose.dev.yml restart cockroachdb"
+sshpc "docker restart nexusflow-cockroachdb"
 
 # Wipe all volumes (fresh start)
-ssh pc "cd NexusFlow/docker && docker compose -f docker-compose.dev.yml down -v"
+sshpc "cd /d D:\nexusflow\docker && docker compose -f docker-compose.dev.yml down -v"
 
-# Connect to CockroachDB SQL
-ssh pc "docker exec -it nexusflow-cockroachdb cockroach sql --insecure --host=localhost"
+# CockroachDB SQL
+sshpc "docker exec nexusflow-cockroachdb cockroach sql --insecure -d nexusflow -e \"SELECT 1;\""
 
-# Connect to Redis CLI
-ssh pc "docker exec -it nexusflow-redis redis-cli -a nexusflow-dev"
+# Kafka topics
+sshpc "docker exec nexusflow-kafka kafka-topics --list --bootstrap-server localhost:29092"
 
-# Check Kafka topics
-ssh pc "docker exec -it nexusflow-kafka kafka-topics --list --bootstrap-server localhost:9092"
-
-# All 9 containers at a glance (alias defined in ~/.zshrc)
-pc-health
+# Redeploy the compose file after editing it locally
+scp -o RemoteCommand=none docker/docker-compose.dev.yml pc:D:/nexusflow/docker/docker-compose.dev.yml
 ```
 
-From the Mac you can also hit the web UIs directly — no SSH needed:
+From the Mac, hit the web UIs directly — no SSH needed:
 `http://dj-pc:4500` (floci) · `http://dj-pc:8090` (Kafka) · `http://dj-pc:8080` (CockroachDB) · `http://dj-pc:5540` (Redis Insight)
 
 ```bash

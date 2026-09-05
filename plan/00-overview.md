@@ -19,26 +19,26 @@ service floci provides — locally, for free, with zero cloud accounts needed in
 
 ## Tech stack
 
-| Layer                        | Technology                          |
-| ---------------------------- | ----------------------------------- |
-| Backend framework            | Spring Boot 3.x (Java 21)           |
-| Backend modules              | Multi-module Maven project          |
-| AI                           | Spring AI + Ollama (local LLM)      |
-| Event backbone               | Apache Kafka                        |
-| Database                     | CockroachDB (Postgres-compatible)   |
-| Cache                        | Redis                               |
-| AWS emulator                 | floci :4566                         |
-| Azure emulator               | floci-az :4577                      |
-| GCP emulator                 | floci-gcp :4588                     |
-| OCI emulator                 | floci-oci :4599                     |
-| Frontend                     | React 18 + Tailwind CSS 3 + Vite    |
-| Real-time                    | WebSocket (Spring + STOMP)          |
-| Auth                         | AWS Cognito (floci)                 |
-| Container                    | Docker + Docker Compose             |
-| Dev \u2014 code + app        | Mac (Spring Boot :8080, Vite :5173) |
-| Dev \u2014 infra + emulators | Windows PC `dj-pc` over Tailscale   |
-| Prod frontend                | Vercel                              |
-| Prod backend                 | Oracle Cloud Free Tier              |
+| Layer                | Technology                          |
+| -------------------- | ----------------------------------- |
+| Backend framework    | Spring Boot 3.x (Java 21)           |
+| Backend modules      | Multi-module Maven project          |
+| AI                   | Spring AI + Ollama (local LLM)      |
+| Event backbone       | Apache Kafka                        |
+| Database             | CockroachDB (Postgres-compatible)   |
+| Cache                | Redis                               |
+| AWS emulator         | floci :4566                         |
+| Azure emulator       | floci-az :4577                      |
+| GCP emulator         | floci-gcp :4588                     |
+| OCI emulator         | floci-oci :4599                     |
+| Frontend             | React 18 + Tailwind CSS 3 + Vite    |
+| Real-time            | WebSocket (Spring + STOMP)          |
+| Auth                 | AWS Cognito (floci)                 |
+| Container            | Docker + Docker Compose             |
+| Dev — code + app     | Mac (Spring Boot :8080, Vite :5173) |
+| Dev — infra + clouds | Windows PC `dj-pc` over Tailscale   |
+| Prod frontend        | Vercel                              |
+| Prod backend         | Oracle Cloud Free Tier              |
 
 ## Core user journey
 
@@ -55,7 +55,7 @@ service floci provides — locally, for free, with zero cloud accounts needed in
 
 ## Project folder structure
 
-```
+```text
 NexusFlow/
 ├── plan/                          ← architecture & design docs (you are here)
 │   ├── 00-overview.md

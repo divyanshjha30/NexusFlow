@@ -52,7 +52,7 @@ Build in this order. Each milestone is independently runnable and demonstrable.
 5. Controller calls `S3Service.upload()` synchronously (no Kafka yet)
 6. Return `DocumentDto` with S3 presigned URL
 
-**Test:** Upload a PDF via Postman, verify it appears in floci UI at http://dj-pc:4500
+**Test:** Upload a PDF via Postman, verify it appears in floci UI at <http://dj-pc:4500>
 
 ---
 
@@ -69,7 +69,7 @@ Build in this order. Each milestone is independently runnable and demonstrable.
 5. Implement `StorageConsumer` in `nexusflow-events`: listens to `file.uploaded`, calls `nexusflow-storage`
 6. Publish `nexusflow.file.stored` after each cloud store succeeds
 
-**Test:** Upload → see 202 response immediately → check Kafka UI at http://dj-pc:8090
+**Test:** Upload → see 202 response immediately → check Kafka UI at <http://dj-pc:8090>
 
 ---
 
@@ -208,7 +208,7 @@ Build in this order. Each milestone is independently runnable and demonstrable.
 
 ## Quick reference — build order
 
-```
+```text
 Week 1:
   Day 1: Project skeleton + DB
   Day 2: Auth (Cognito JWT)

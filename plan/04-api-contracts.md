@@ -22,7 +22,7 @@ Upload a file. Returns immediately with 202; AI processing happens async.
 
 **Request:** `Content-Type: multipart/form-data`
 
-```
+```text
 file       (binary, required)   — the file to upload
 metadata   (JSON string, optional) — {description: "...", tags: ["custom-tag"]}
 ```
@@ -66,7 +66,7 @@ List the authenticated user's documents.
 
 **Query parameters:**
 
-```
+```text
 page        (int, default 0)
 size        (int, default 20, max 100)
 sort        (string, default "createdAt")   — createdAt, fileName, fileSize

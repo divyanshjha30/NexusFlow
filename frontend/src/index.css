@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-base text-content-primary font-sans text-body antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-edge;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-content-muted;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-edge bg-surface;
+  }
+
+  .card-glass {
+    @apply rounded-xl border border-edge bg-surface/70 backdrop-blur-xl;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-small font-medium
+           transition-colors disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-brand text-white hover:bg-brand-light;
+  }
+
+  .btn-ghost {
+    @apply btn border border-edge text-content-secondary hover:bg-surface-raised hover:text-content-primary;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-edge bg-surface px-3 py-2 text-small text-content-primary
+           placeholder:text-content-muted focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded bg-surface-raised;
+  }
+
+  .skeleton::after {
+    @apply absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r
+           from-transparent via-white/5 to-transparent;
+    content: "";
+  }
+}
