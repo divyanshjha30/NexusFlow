@@ -77,7 +77,7 @@ export function DocumentDetail() {
               <h3 className="text-caption uppercase tracking-wide text-content-muted">
                 Extracted text
               </h3>
-              <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-edge-subtle bg-base p-3 font-mono text-caption text-content-secondary">
+              <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-edge-subtle bg-canvas p-3 font-mono text-caption text-content-secondary">
                 {doc.extractedText}
               </pre>
             </div>

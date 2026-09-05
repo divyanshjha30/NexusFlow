@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { LayoutGrid, List, Search } from "lucide-react";
+import { LayoutGrid, List, Search, X, FileSearch } from "lucide-react";
 import { api } from "@/api/client";
 import { DocumentCard } from "@/components/documents/DocumentCard";
 import { DocumentRow } from "@/components/documents/DocumentRow";
+import { BulkActionBar } from "@/components/documents/BulkActionBar";
 import { Spinner } from "@/components/ui/Spinner";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { cn } from "@/lib/utils";
 import type {
   DocumentDto,
@@ -35,12 +37,21 @@ const CLOUDS: Array<CloudProvider | "ALL"> = [
 function DocumentResults({
   documents,
   view,
-}: Readonly<{ documents: DocumentDto[]; view: "grid" | "list" }>) {
+  selected,
+  onToggle,
+}: Readonly<{
+  documents: DocumentDto[];
+  view: "grid" | "list";
+  selected: string[];
+  onToggle: (id: string) => void;
+}>) {
   if (documents.length === 0) {
     return (
-      <p className="card p-8 text-center text-small text-content-muted">
-        No documents match these filters.
-      </p>
+      <EmptyState
+        icon={FileSearch}
+        title="Nothing matches those filters"
+        description="Try clearing a filter or searching for something broader."
+      />
     );
   }
 
@@ -48,7 +59,12 @@ function DocumentResults({
     return (
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {documents.map((doc) => (
-          <DocumentCard key={doc.id} document={doc} />
+          <DocumentCard
+            key={doc.id}
+            document={doc}
+            selected={selected.includes(doc.id)}
+            onToggleSelect={() => onToggle(doc.id)}
+          />
         ))}
       </div>
     );
@@ -102,11 +118,14 @@ export function Library({
     placeholderData: keepPreviousData,
   });
 
+  const [selected, setSelected] = useState<string[]>([]);
+
   function update<K extends keyof DocumentFilters>(
     key: K,
     value: DocumentFilters[K],
   ) {
     setFilters((f) => ({ ...f, [key]: value, page: 0 }));
+    setSelected([]);
   }
 
   return (
@@ -162,7 +181,6 @@ export function Library({
             onChange={(e) => update("search", e.target.value)}
           />
         </div>
-
         <select
           className="input w-auto"
           value={filters.type}
@@ -211,7 +229,51 @@ export function Library({
         </select>
       </div>
 
-      <DocumentResults documents={data?.content ?? []} view={view} />
+      {(filters.type !== "ALL" ||
+        filters.cloud !== "ALL" ||
+        !!filters.search?.trim()) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-caption text-content-muted">Filters</span>
+          {filters.search?.trim() && (
+            <button
+              type="button"
+              onClick={() => update("search", "")}
+              className="chip chip-active"
+            >
+              “{filters.search}” <X className="h-3 w-3" />
+            </button>
+          )}
+          {filters.type !== "ALL" && (
+            <button
+              type="button"
+              onClick={() => update("type", "ALL")}
+              className="chip chip-active"
+            >
+              {filters.type} <X className="h-3 w-3" />
+            </button>
+          )}
+          {filters.cloud !== "ALL" && (
+            <button
+              type="button"
+              onClick={() => update("cloud", "ALL")}
+              className="chip chip-active"
+            >
+              {filters.cloud} <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      )}
+
+      <DocumentResults
+        documents={data?.content ?? []}
+        view={view}
+        selected={selected}
+        onToggle={(id) =>
+          setSelected((s) =>
+            s.includes(id) ? s.filter((x) => x !== id) : [...s, id],
+          )
+        }
+      />
 
       {data && data.totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
@@ -236,6 +298,8 @@ export function Library({
           </button>
         </div>
       )}
+
+      <BulkActionBar count={selected.length} onClear={() => setSelected([])} />
     </div>
   );
 }

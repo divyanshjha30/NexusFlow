@@ -3,15 +3,22 @@ import { Outlet } from "react-router-dom";
 import { WifiOff } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { ActivitySidebar } from "./ActivitySidebar";
+import { TopBar } from "./TopBar";
 import { isOffline, onOfflineChange } from "@/api/client";
 import { useProcessingSocket } from "@/hooks/useProcessingSocket";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useUploadStore } from "@/stores/uploadStore";
+import { CommandPalette } from "@/components/ui/CommandPalette";
+import { ShortcutsDialog } from "@/components/ui/ShortcutsDialog";
+import { Toaster } from "@/components/ui/Toaster";
+import { GlobalDropOverlay } from "@/components/upload/GlobalDropOverlay";
 
 export function AppLayout() {
   const [offline, setOffline] = useState(isOffline());
   const applyEvent = useUploadStore((s) => s.applyEvent);
 
   useProcessingSocket(applyEvent);
+  useKeyboardShortcuts();
 
   useEffect(() => onOfflineChange(setOffline), []);
 
@@ -20,9 +27,11 @@ export function AppLayout() {
       <Sidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar />
+
         {offline && (
-          <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-caption text-amber-300">
-            <WifiOff className="h-3.5 w-3.5" />
+          <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-5 py-1.5 text-caption text-amber-600 dark:text-amber-300">
+            <WifiOff className="h-3.5 w-3.5 shrink-0" />
             Backend unreachable — showing demo data. Check that Tailscale is
             connected and the API is running.
           </div>
@@ -34,6 +43,11 @@ export function AppLayout() {
       </div>
 
       <ActivitySidebar />
+
+      <CommandPalette />
+      <ShortcutsDialog />
+      <GlobalDropOverlay />
+      <Toaster />
     </div>
   );
 }
