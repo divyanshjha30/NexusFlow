@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.time.Instant;
@@ -33,6 +34,15 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> domain(NexusFlowException e) {
         log.warn("Domain error {}: {}", e.getErrorCode(), e.getMessage());
         return build(HttpStatus.BAD_REQUEST, e.getErrorCode(), e.getMessage());
+    }
+
+    /**
+     * The response is already streaming by this point, so returning a body would
+     * splice JSON into the middle of the text the user is reading.
+     */
+    @ExceptionHandler(AsyncRequestTimeoutException.class)
+    public void asyncTimeout(AsyncRequestTimeoutException e) {
+        log.warn("Streaming response timed out before completion");
     }
 
     @ExceptionHandler(Exception.class)
