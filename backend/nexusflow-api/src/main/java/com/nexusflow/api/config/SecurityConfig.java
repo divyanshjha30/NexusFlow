@@ -1,6 +1,5 @@
 package com.nexusflow.api.config;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -47,26 +46,14 @@ public class SecurityConfig {
      * key set is fetched over the network address that actually resolves.
      */
     @Bean
-    JwtDecoder jwtDecoder(
-            @Value("${nexusflow.cognito.jwk-set-uri}") String jwkSetUri,
-            @Value("${nexusflow.cognito.issuer}") String issuer,
-            @Value("${nexusflow.cognito.client-id}") String clientId) {
-
-        // Without these the app still starts but every authenticated request fails,
-        // which is far harder to diagnose than refusing to boot.
-        if (clientId.isBlank() || jwkSetUri.contains("//.well-known")) {
-            throw new IllegalStateException(
-                    "Cognito is not configured. Load the environment first: "
-                            + "set -a; . ./.env.dev; set +a");
-        }
-
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+    JwtDecoder jwtDecoder(CognitoSettings cognito) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(cognito.jwkSetUri()).build();
 
         OAuth2TokenValidator<Jwt> audience = new JwtClaimValidator<List<String>>(
-                "aud", aud -> aud != null && aud.contains(clientId));
+                "aud", aud -> aud != null && aud.contains(cognito.clientId()));
 
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
-                JwtValidators.createDefaultWithIssuer(issuer),
+                JwtValidators.createDefaultWithIssuer(cognito.issuer()),
                 audience));
 
         return decoder;

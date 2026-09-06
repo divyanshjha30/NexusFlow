@@ -68,12 +68,16 @@ nexusflow:
     secret-key: ${AWS_SECRET_ACCESS_KEY:test}
     bucket: ${S3_BUCKET_NAME:nexusflow-documents}
   cognito:
+    # The emulator loses Cognito state on restart, so the pool is looked up by
+    # name and recreated when missing. Disable against a real user pool.
+    auto-provision: ${COGNITO_AUTO_PROVISION:true}
+    pool-name: ${COGNITO_POOL_NAME:nexusflow-users}
+    client-name: ${COGNITO_CLIENT_NAME:nexusflow-web}
+    # Only used when auto-provision is off.
     user-pool-id: ${COGNITO_USER_POOL_ID:}
     client-id: ${COGNITO_APP_CLIENT_ID:}
-    # Reachable over the network; floci serves a key set per pool.
-    jwk-set-uri: ${COGNITO_JWKS_URI:http://dj-pc:4566/${COGNITO_USER_POOL_ID:}/.well-known/jwks.json}
     # floci mints tokens with a localhost issuer regardless of the host used.
-    issuer: ${COGNITO_ISSUER:http://localhost:4566/${COGNITO_USER_POOL_ID:}}
+    issuer-base: ${COGNITO_ISSUER_BASE:http://localhost:4566}
   azure:
     endpoint: ${AZURE_STORAGE_ENDPOINT:http://dj-pc:4577}
     account: ${AZURE_STORAGE_ACCOUNT:devstoreaccount1}

@@ -1,5 +1,6 @@
 package com.nexusflow.api.controller;
 
+import com.nexusflow.api.config.CognitoSettings;
 import com.nexusflow.common.exception.NexusFlowException;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,13 +30,10 @@ public class AuthController {
     private final String clientId;
     private final String userPoolId;
 
-    public AuthController(
-            CognitoIdentityProviderClient cognito,
-            @org.springframework.beans.factory.annotation.Value("${nexusflow.cognito.client-id}") String clientId,
-            @org.springframework.beans.factory.annotation.Value("${nexusflow.cognito.user-pool-id}") String userPoolId) {
+    public AuthController(CognitoIdentityProviderClient cognito, CognitoSettings settings) {
         this.cognito = cognito;
-        this.clientId = clientId;
-        this.userPoolId = userPoolId;
+        this.clientId = settings.clientId();
+        this.userPoolId = settings.userPoolId();
     }
 
     public record LoginRequest(String email, String password) {}
