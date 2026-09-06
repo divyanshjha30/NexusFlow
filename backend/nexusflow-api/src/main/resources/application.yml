@@ -1,6 +1,12 @@
 spring:
   application:
     name: nexusflow-api
+  # Loads .env.dev automatically so `mvn spring-boot:run` needs no shell setup.
+  # Tried relative to the module dir first, then the repo root.
+  config:
+    import:
+      - optional:file:../../.env.dev[.properties]
+      - optional:file:./.env.dev[.properties]
   datasource:
     url: ${DB_URL:jdbc:postgresql://dj-pc:26257/nexusflow?sslmode=disable}
     username: ${DB_USERNAME:root}
@@ -8,7 +14,17 @@ spring:
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
+      minimum-idle: 2
       connection-timeout: 10000
+      # Tailscale reaps idle NAT flows, so probe and recycle connections well
+      # before the tunnel silently drops them underneath the pool.
+      keepalive-time: 30000
+      idle-timeout: 60000
+      max-lifetime: 240000
+      validation-timeout: 5000
+      connection-test-query: SELECT 1
+      data-source-properties:
+        tcpKeepAlive: true
   flyway:
     enabled: true
     baseline-on-migrate: true
@@ -17,6 +33,29 @@ spring:
     multipart:
       max-file-size: 100MB
       max-request-size: 105MB
+  task:
+    execution:
+      pool:
+        core-size: 4
+        max-size: 12
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:dj-pc:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+    consumer:
+      group-id: nexusflow
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.nexusflow.*
+    listener:
+      concurrency: 3
 
 server:
   port: ${SERVER_PORT:8080}
@@ -28,15 +67,31 @@ nexusflow:
     access-key: ${AWS_ACCESS_KEY_ID:test}
     secret-key: ${AWS_SECRET_ACCESS_KEY:test}
     bucket: ${S3_BUCKET_NAME:nexusflow-documents}
+  cognito:
+    user-pool-id: ${COGNITO_USER_POOL_ID:}
+    client-id: ${COGNITO_APP_CLIENT_ID:}
+    # Reachable over the network; floci serves a key set per pool.
+    jwk-set-uri: ${COGNITO_JWKS_URI:http://dj-pc:4566/${COGNITO_USER_POOL_ID:}/.well-known/jwks.json}
+    # floci mints tokens with a localhost issuer regardless of the host used.
+    issuer: ${COGNITO_ISSUER:http://localhost:4566/${COGNITO_USER_POOL_ID:}}
   azure:
     endpoint: ${AZURE_STORAGE_ENDPOINT:http://dj-pc:4577}
+    account: ${AZURE_STORAGE_ACCOUNT:devstoreaccount1}
+    key: ${AZURE_STORAGE_KEY:}
+    container: ${AZURE_BLOB_CONTAINER:nexusflow-documents}
   gcp:
     endpoint: ${GCP_ENDPOINT:http://dj-pc:4588}
+    project: ${GCP_PROJECT_ID:floci-local}
+    bucket: ${GCS_BUCKET_NAME:nexusflow-documents}
   oci:
     endpoint: ${OCI_ENDPOINT:http://dj-pc:4599}
+    namespace: ${OCI_NAMESPACE:floci-local}
+    bucket: ${OCI_BUCKET_NAME:nexusflow-archive}
+    compartment-id: ${OCI_COMPARTMENT_ID:ocid1.compartment.oc1..floci}
   ollama:
     base-url: ${OLLAMA_BASE_URL:http://dj-pc:11434}
     model: ${OLLAMA_MODEL:llama3.2}
+    embed-model: ${OLLAMA_EMBED_MODEL:nomic-embed-text}
 
 management:
   endpoints:
@@ -47,3 +102,6 @@ management:
 logging:
   level:
     com.nexusflow: DEBUG
+    com.azure: WARN
+    io.grpc: WARN
+    org.apache.kafka: WARN

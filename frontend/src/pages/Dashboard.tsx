@@ -33,6 +33,12 @@ export function Dashboard() {
     refetchInterval: 30_000,
   });
 
+  const { data: stats } = useQuery({
+    queryKey: ["stats"],
+    queryFn: () => api.getStats(),
+    refetchInterval: 15_000,
+  });
+
   const { data: recent } = useQuery({
     queryKey: ["documents", "recent"],
     queryFn: () =>
@@ -49,15 +55,18 @@ export function Dashboard() {
     queryFn: () => api.getMe(),
   });
 
-  const totalDocs = recent?.totalElements ?? 0;
-  const replicas = totalDocs * 4;
+  const uploadTrend = stats?.uploadsByDay.map((d) => d.count) ?? [];
+  const maxCloudBytes = Math.max(
+    1,
+    ...CLOUDS.map((c) => stats?.perCloud?.[c]?.bytes ?? 0),
+  );
 
   return (
     <div className="space-y-6 p-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Welcome back, {user?.displayName ?? "there"}
+            Welcome back{user?.displayName ? `, ${user.displayName}` : ""}
           </h1>
           <p className="text-small text-content-secondary">
             Drop a file anywhere to replicate it across all four clouds.
@@ -71,32 +80,26 @@ export function Dashboard() {
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Documents"
-          value={totalDocs}
-          delta={12}
+          value={stats?.documentCount ?? 0}
           icon={FileStack}
-          points={[3, 5, 4, 8, 7, 11, 14]}
+          points={uploadTrend}
         />
         <StatCard
           label="Cloud replicas"
-          value={replicas}
-          delta={12}
+          value={stats?.replicaCount ?? 0}
           icon={Zap}
-          points={[12, 20, 16, 32, 28, 44, 56]}
+          points={uploadTrend.map((c) => c * 4)}
         />
         <StatCard
           label="Storage used"
-          value={user?.storageUsedBytes ?? 0}
+          value={stats?.totalBytes ?? 0}
           format={formatBytes}
-          delta={4}
           icon={HardDrive}
-          points={[20, 22, 25, 28, 33, 38, 50]}
         />
         <StatCard
-          label="AI analyses"
-          value={totalDocs}
-          delta={-3}
+          label="AI analysed"
+          value={stats?.analysedCount ?? 0}
           icon={Sparkles}
-          points={[9, 12, 10, 14, 11, 13, 12]}
         />
       </section>
 
@@ -128,7 +131,8 @@ export function Dashboard() {
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {CLOUDS.map((cloud) => {
             const status = health?.[cloud];
-            const pct = Math.min(100, ((status?.objectCount ?? 0) / 200) * 100);
+            const usage = stats?.perCloud?.[cloud];
+            const pct = ((usage?.bytes ?? 0) / maxCloudBytes) * 100;
             return (
               <div key={cloud} className="card-interactive p-3">
                 <div className="flex items-center justify-between">
@@ -144,7 +148,7 @@ export function Dashboard() {
                   {CLOUD_LABEL[cloud]}
                 </p>
                 <p className="text-lg font-semibold text-content-primary">
-                  {formatBytes((status?.objectCount ?? 0) * 17_000)}
+                  {formatBytes(usage?.bytes ?? 0)}
                 </p>
                 <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-edge-subtle">
                   <div
@@ -153,7 +157,7 @@ export function Dashboard() {
                   />
                 </div>
                 <p className="mt-1 text-caption text-content-muted">
-                  {status?.objectCount ?? 0} objects
+                  {usage?.objects ?? 0} replicated
                 </p>
               </div>
             );
@@ -178,7 +182,7 @@ export function Dashboard() {
           <EmptyState
             icon={Inbox}
             title="No documents yet"
-            description="Drop a file above and NexusFlow will store it across AWS, Azure, GCP and OCI, then analyse it with AI."
+            description="Drop a file above and NexusFlow will store it across AWS, Azure, GCP and OCI, then analyse it with a local LLM."
           />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

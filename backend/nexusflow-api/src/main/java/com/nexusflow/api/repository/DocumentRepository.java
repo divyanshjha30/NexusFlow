@@ -24,6 +24,7 @@ import java.util.UUID;
 public class DocumentRepository {
 
     private static final String STATUS = "status";
+    private static final String SELECT = "SELECT ";
 
     private static final String SELECT_COLUMNS = """
             id, user_id, file_name, original_name, mime_type, file_size_bytes,
@@ -53,7 +54,7 @@ public class DocumentRepository {
     ) {}
 
     public List<DocumentDto> find(Filter f) {
-        StringBuilder sql = new StringBuilder("SELECT " + SELECT_COLUMNS + " FROM documents WHERE deleted_at IS NULL");
+        StringBuilder sql = new StringBuilder(SELECT + SELECT_COLUMNS + " FROM documents WHERE deleted_at IS NULL");
         Map<String, Object> params = new LinkedHashMap<>();
         appendFilters(sql, params, f);
 
@@ -79,7 +80,7 @@ public class DocumentRepository {
     }
 
     public Optional<DocumentDto> findById(UUID id) {
-        return jdbc.sql("SELECT " + SELECT_COLUMNS + " FROM documents WHERE id = :id AND deleted_at IS NULL")
+        return jdbc.sql(SELECT + SELECT_COLUMNS + " FROM documents WHERE id = :id AND deleted_at IS NULL")
                 .param("id", id)
                 .query(this::mapRow)
                 .optional();
@@ -127,6 +128,80 @@ public class DocumentRepository {
                 .param(STATUS, status)
                 .param("id", id)
                 .update();
+    }
+
+    public record AiResult(
+            String documentType,
+            String summary,
+            List<String> tags,
+            String entitiesJson,
+            String sentiment,
+            Double confidence,
+            String extractedText
+    ) {}
+
+    public void saveAiResult(UUID id, AiResult result) {
+        jdbc.sql("""
+                UPDATE documents SET
+                    document_type    = :type,
+                    summary          = :summary,
+                    ai_tags          = :tags,
+                    entities         = CAST(:entities AS JSONB),
+                    sentiment        = :sentiment,
+                    confidence_score = :confidence,
+                    extracted_text   = :text,
+                    classification   = :type,
+                    status           = 'READY',
+                    updated_at       = NOW()
+                WHERE id = :id
+                """)
+                .param("type", result.documentType())
+                .param("summary", result.summary())
+                .param("tags", result.tags().toArray(String[]::new))
+                .param("entities", result.entitiesJson())
+                .param("sentiment", result.sentiment())
+                .param("confidence", result.confidence())
+                .param("text", result.extractedText())
+                .param("id", id)
+                .update();
+    }
+
+    public void softDelete(UUID id) {
+        jdbc.sql("UPDATE documents SET deleted_at = NOW(), updated_at = NOW() WHERE id = :id")
+                .param("id", id)
+                .update();
+    }
+
+    public void setArchived(UUID id, boolean archived) {
+        jdbc.sql("""
+                UPDATE documents SET
+                    is_archived = :archived,
+                    archived_at = CASE WHEN :archived THEN NOW() ELSE NULL END,
+                    status      = CASE WHEN :archived THEN 'ARCHIVED' ELSE 'READY' END,
+                    updated_at  = NOW()
+                WHERE id = :id
+                """)
+                .param("archived", archived)
+                .param("id", id)
+                .update();
+    }
+
+    /** Keyword half of hybrid search. */
+    public List<DocumentDto> keywordSearch(UUID userId, String query, int limit) {
+        return jdbc.sql(SELECT + SELECT_COLUMNS + """
+                 FROM documents
+                 WHERE deleted_at IS NULL AND user_id = :user
+                   AND (file_name ILIKE :q
+                        OR COALESCE(summary, '') ILIKE :q
+                        OR COALESCE(extracted_text, '') ILIKE :q)
+                 ORDER BY created_at DESC
+                 LIMIT :limit
+                """)
+                .param("user", userId)
+                .param("q", "%" + query.strip() + "%")
+                .param("limit", limit)
+                .query(this::mapRow)
+                .list();
     }
 
     public long totalBytesForUser(UUID userId) {
@@ -181,7 +256,7 @@ public class DocumentRepository {
                 readArray(rs.getArray("ai_tags")),
                 readEntities(rs.getString("entities")),
                 rs.getString("sentiment"),
-                (Double) rs.getObject("confidence_score"),
+                toDouble(rs.getBigDecimal("confidence_score")),
                 new StorageLocationsDto(
                         rs.getString("s3_key"),
                         rs.getString("azure_blob_name"),
@@ -195,6 +270,11 @@ public class DocumentRepository {
 
     private static Instant toInstant(Timestamp ts) {
         return ts == null ? null : ts.toInstant();
+    }
+
+    /** confidence_score is DECIMAL, so JDBC hands back BigDecimal. */
+    private static Double toDouble(java.math.BigDecimal value) {
+        return value == null ? null : value.doubleValue();
     }
 
     private static List<String> readArray(Array array) throws SQLException {

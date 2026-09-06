@@ -68,13 +68,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       appendToken,
     );
 
+    // Citations come from the same retrieval that grounded the answer.
+    let sources: Awaited<ReturnType<typeof api.chatSources>> = [];
+    try {
+      sources = await api.chatSources(message, get().selectedDocumentIds);
+    } catch {
+      /* citations are best-effort */
+    }
+
     set((s) => ({
       messages: s.messages.map((m) =>
         m.id === streamingId
           ? {
               ...m,
               content: final.content,
-              sources: final.sources,
+              sources,
               pending: false,
             }
           : m,

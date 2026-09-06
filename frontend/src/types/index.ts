@@ -105,21 +105,41 @@ export interface CloudStatus {
   objectCount: number;
 }
 
-export interface CloudEvent {
-  id: string;
-  timestamp: string;
-  eventType: string;
-  fileName: string;
-  cloud: CloudProvider | null;
-  target: string;
-  durationMs: number;
-}
-
 export interface SourceRef {
   documentId: string;
   fileName: string;
   excerpt: string;
   relevanceScore: number;
+}
+
+export interface SearchHit {
+  document: DocumentDto;
+  score: number;
+  excerpt: string | null;
+  matchedFields: string[];
+}
+
+export interface CloudUsage {
+  objects: number;
+  bytes: number;
+}
+
+export interface Stats {
+  documentCount: number;
+  totalBytes: number;
+  replicaCount: number;
+  analysedCount: number;
+  perCloud: Record<CloudProvider, CloudUsage>;
+  uploadsByDay: Array<{ date: string; count: number }>;
+}
+
+export interface DocumentEvent {
+  documentId: string;
+  eventType: string;
+  message: string | null;
+  cloudProvider: CloudProvider | null;
+  durationMs: number | null;
+  createdAt: string;
 }
 
 export interface ChatMessageDto {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ChevronRight,
@@ -12,85 +12,89 @@ import { api } from "@/api/client";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Badge } from "@/components/ui/Badge";
 import { CloudDot } from "@/components/ui/CloudDot";
+import { Spinner } from "@/components/ui/Spinner";
 import { cn, formatTime, relativeTime } from "@/lib/utils";
-import type { CloudProvider, DocumentDto } from "@/types";
+import type { DocumentStatus } from "@/types";
 
-interface TraceStep {
-  label: string;
-  detail: string;
-  durationMs: number;
-  cloud: CloudProvider | null;
-  kind: "storage" | "ai";
-}
-
-const CLOUDS: CloudProvider[] = ["AWS", "AZURE", "GCP", "OCI"];
-const CLOUD_TARGET: Record<CloudProvider, string> = {
-  AWS: "S3",
-  AZURE: "Blob Storage",
-  GCP: "Cloud Storage",
-  OCI: "Object Storage",
-};
-
-/** Derives a plausible pipeline trace for a document. */
-function buildTrace(doc: DocumentDto): TraceStep[] {
-  const seed = doc.id.charCodeAt(0);
-  const storage: TraceStep[] = CLOUDS.map((cloud, i) => ({
-    label: `Stored to ${cloud}`,
-    detail: CLOUD_TARGET[cloud],
-    durationMs: 180 + ((seed * (i + 3)) % 320),
-    cloud,
-    kind: "storage",
-  }));
-
-  if (doc.status !== "READY" && doc.status !== "ARCHIVED") return storage;
-
-  return [
-    ...storage,
-    {
-      label: "Classified",
-      detail: `${doc.documentType ?? "OTHER"} · Vertex AI`,
-      durationMs: 891,
-      cloud: "GCP",
-      kind: "ai",
-    },
-    {
-      label: "Summarised",
-      detail: "Bedrock · Claude Haiku",
-      durationMs: 1240,
-      cloud: "AWS",
-      kind: "ai",
-    },
-    {
-      label: "Entities extracted",
-      detail: "Comprehend",
-      durationMs: 410,
-      cloud: "AWS",
-      kind: "ai",
-    },
-    {
-      label: "Embedded",
-      detail: "nomic-embed-text · 768d",
-      durationMs: 302,
-      cloud: null,
-      kind: "ai",
-    },
-    {
-      label: "Indexed",
-      detail: "CockroachDB full-text + vector",
-      durationMs: 88,
-      cloud: null,
-      kind: "ai",
-    },
-  ];
-}
-
-const GROUP_ICON = {
+const GROUP_ICON: Record<DocumentStatus, typeof CloudUpload> = {
   READY: Sparkles,
   PROCESSING: CloudUpload,
   UPLOADING: CloudUpload,
   ARCHIVED: Archive,
   FAILED: Trash2,
 };
+
+const AI_EVENTS = new Set([
+  "AI_STARTED",
+  "AI_CLASSIFIED",
+  "AI_SUMMARISED",
+  "AI_ENTITIES",
+  "AI_EMBEDDED",
+  "AI_COMPLETE",
+]);
+
+function Trace({ documentId }: Readonly<{ documentId: string }>) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["events", documentId],
+    queryFn: () => api.getDocumentEvents(documentId),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-3 text-small text-content-muted">
+        <Spinner /> Loading trace…
+      </div>
+    );
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <p className="px-3 py-3 text-small text-content-muted">
+        No recorded events for this document.
+      </p>
+    );
+  }
+
+  const total = data.reduce((sum, e) => sum + (e.durationMs ?? 0), 0);
+
+  return (
+    <ol className="animate-fade-slide-up divide-y divide-edge-subtle border-t border-edge">
+      {data.map((step) => (
+        <li
+          key={`${step.eventType}-${step.createdAt}`}
+          className="grid grid-cols-[16px_1fr_auto_auto] items-center gap-3 px-3 py-2"
+        >
+          <span
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              AI_EVENTS.has(step.eventType) ? "bg-purple-400" : "bg-green-400",
+            )}
+          />
+          <div className="min-w-0">
+            <p className="truncate text-small text-content-primary">
+              {step.eventType.replaceAll("_", " ").toLowerCase()}
+            </p>
+            <p className="truncate text-caption text-content-muted">
+              {step.message ?? "—"}
+            </p>
+          </div>
+          {step.cloudProvider ? (
+            <CloudDot cloud={step.cloudProvider} showLabel={false} />
+          ) : (
+            <span />
+          )}
+          <span className="font-mono text-caption text-content-muted">
+            {step.durationMs != null ? `${step.durationMs}ms` : "—"}
+          </span>
+        </li>
+      ))}
+      <li className="flex items-center justify-between px-3 py-2 text-caption text-content-muted">
+        <span>Last event {formatTime(data[data.length - 1].createdAt)}</span>
+        <span className="font-mono">{total}ms recorded</span>
+      </li>
+    </ol>
+  );
+}
 
 export function ActivityPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -106,14 +110,14 @@ export function ActivityPage() {
       }),
   });
 
-  const groups = useMemo(() => data?.content ?? [], [data]);
+  const groups = data?.content ?? [];
 
   return (
     <div className="space-y-5 p-6">
       <header>
         <h1 className="text-2xl font-bold tracking-tight">Activity</h1>
         <p className="text-small text-content-secondary">
-          Every document grouped with its full replication and AI trace.
+          Every document with its recorded replication and AI trace.
         </p>
       </header>
 
@@ -127,8 +131,6 @@ export function ActivityPage() {
         <ol className="relative space-y-2 before:absolute before:left-[15px] before:top-2 before:h-[calc(100%-1rem)] before:w-px before:bg-edge">
           {groups.map((doc) => {
             const open = expanded === doc.id;
-            const trace = buildTrace(doc);
-            const total = trace.reduce((sum, s) => sum + s.durationMs, 0);
             const Icon = GROUP_ICON[doc.status] ?? CloudUpload;
 
             return (
@@ -154,53 +156,12 @@ export function ActivityPage() {
                       {doc.fileName}
                     </span>
                     <Badge variant={doc.status} />
-                    <span className="hidden shrink-0 font-mono text-caption text-content-muted sm:inline">
-                      {total}ms
-                    </span>
                     <span className="shrink-0 text-caption text-content-muted">
                       {relativeTime(doc.createdAt)}
                     </span>
                   </button>
 
-                  {open && (
-                    <ol className="animate-fade-slide-up divide-y divide-edge-subtle border-t border-edge">
-                      {trace.map((step) => (
-                        <li
-                          key={step.label}
-                          className="grid grid-cols-[16px_1fr_auto_auto] items-center gap-3 px-3 py-2"
-                        >
-                          <span
-                            className={cn(
-                              "h-1.5 w-1.5 rounded-full",
-                              step.kind === "ai"
-                                ? "bg-purple-400"
-                                : "bg-green-400",
-                            )}
-                          />
-                          <div className="min-w-0">
-                            <p className="truncate text-small text-content-primary">
-                              {step.label}
-                            </p>
-                            <p className="truncate text-caption text-content-muted">
-                              {step.detail}
-                            </p>
-                          </div>
-                          {step.cloud ? (
-                            <CloudDot cloud={step.cloud} showLabel={false} />
-                          ) : (
-                            <span />
-                          )}
-                          <span className="font-mono text-caption text-content-muted">
-                            {step.durationMs}ms
-                          </span>
-                        </li>
-                      ))}
-                      <li className="flex items-center justify-between px-3 py-2 text-caption text-content-muted">
-                        <span>Completed {formatTime(doc.updatedAt)}</span>
-                        <span className="font-mono">{total}ms total</span>
-                      </li>
-                    </ol>
-                  )}
+                  {open && <Trace documentId={doc.id} />}
                 </div>
               </li>
             );

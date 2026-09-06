@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Library,
@@ -13,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { api } from "@/api/client";
 import { useSavedViewsStore, viewToSearch } from "@/stores/savedViewsStore";
 
 const NAV = [
@@ -26,11 +28,15 @@ const NAV = [
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
-const TAGS = ["invoice", "contract", "acme-corp", "2024", "receipt"];
-
 export function Sidebar() {
   const views = useSavedViewsStore((s) => s.views);
   const remove = useSavedViewsStore((s) => s.remove);
+
+  const { data: tags } = useQuery({
+    queryKey: ["tags"],
+    queryFn: () => api.getTags(),
+    staleTime: 60_000,
+  });
 
   return (
     <aside className="flex w-56 shrink-0 flex-col gap-6 overflow-y-auto border-r border-edge bg-surface/50 p-4">
@@ -90,22 +96,24 @@ export function Sidebar() {
         </div>
       )}
 
-      <div className="space-y-2">
-        <p className="px-2.5 text-caption uppercase tracking-wide text-content-muted">
-          Tags
-        </p>
-        <div className="flex flex-wrap gap-1 px-2.5">
-          {TAGS.map((tag) => (
-            <NavLink
-              key={tag}
-              to={`/library?q=${tag}`}
-              className="rounded bg-surface-raised px-1.5 py-0.5 text-caption text-content-secondary hover:bg-brand/20 hover:text-brand-light"
-            >
-              #{tag}
-            </NavLink>
-          ))}
+      {tags && tags.length > 0 && (
+        <div className="space-y-2">
+          <p className="px-2.5 text-caption uppercase tracking-wide text-content-muted">
+            Tags
+          </p>
+          <div className="flex flex-wrap gap-1 px-2.5">
+            {tags.map((tag) => (
+              <NavLink
+                key={tag}
+                to={`/library?q=${encodeURIComponent(tag)}`}
+                className="rounded bg-surface-raised px-1.5 py-0.5 text-caption text-content-secondary hover:bg-brand/20 hover:text-brand-light"
+              >
+                #{tag}
+              </NavLink>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </aside>
   );
 }

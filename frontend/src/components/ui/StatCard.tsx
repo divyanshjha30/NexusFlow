@@ -2,11 +2,21 @@ import { useEffect, useState } from "react";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** Counts up to `value` once on mount. */
+/** Counts up to `value`, falling back to the exact value when animation cannot run. */
 function useCountUp(value: number, duration = 700) {
-  const [display, setDisplay] = useState(0);
+  const [display, setDisplay] = useState(value);
 
   useEffect(() => {
+    const canAnimate =
+      typeof requestAnimationFrame === "function" &&
+      document.visibilityState === "visible" &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (!canAnimate) {
+      setDisplay(value);
+      return;
+    }
+
     let frame = 0;
     const start = performance.now();
     const tick = (now: number) => {
@@ -16,7 +26,11 @@ function useCountUp(value: number, duration = 700) {
       if (progress < 1) frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      setDisplay(value);
+    };
   }, [value, duration]);
 
   return display;

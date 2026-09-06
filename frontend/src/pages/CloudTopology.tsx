@@ -4,13 +4,17 @@ import { api } from "@/api/client";
 import { CloudStatusCard } from "@/components/clouds/CloudStatusCard";
 import { TopologyGraph } from "@/components/clouds/TopologyGraph";
 import { EventFeed } from "@/components/clouds/EventFeed";
-import { useEventStore } from "@/stores/eventStore";
 import type { CloudProvider } from "@/types";
 
 const CLOUDS: CloudProvider[] = ["AWS", "AZURE", "GCP", "OCI"];
 
 export function CloudTopology() {
-  const events = useEventStore((s) => s.events);
+  const { data: events } = useQuery({
+    queryKey: ["events", "recent"],
+    queryFn: () => api.getRecentEvents(80),
+    refetchInterval: 5_000,
+  });
+
   const { data, dataUpdatedAt } = useQuery({
     queryKey: ["cloud-health"],
     queryFn: () => api.getCloudHealth(),
@@ -69,11 +73,11 @@ export function CloudTopology() {
           <Activity className="h-3.5 w-3.5" />
           Live event feed
           <span className="ml-auto normal-case text-content-muted">
-            {events.length} events
+            {events?.length ?? 0} events
           </span>
         </h2>
         <div className="max-h-96 overflow-y-auto">
-          <EventFeed events={events} />
+          <EventFeed events={events ?? []} />
         </div>
       </section>
     </div>

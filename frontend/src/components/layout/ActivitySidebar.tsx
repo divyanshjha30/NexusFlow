@@ -1,13 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { api } from "@/api/client";
-import { useEventStore } from "@/stores/eventStore";
 import { useUploadStore } from "@/stores/uploadStore";
 import { relativeTime } from "@/lib/utils";
 
 export function ActivitySidebar() {
-  const events = useEventStore((s) => s.events);
   const items = useUploadStore((s) => s.items);
+
+  const { data: events } = useQuery({
+    queryKey: ["events", "sidebar"],
+    queryFn: () => api.getRecentEvents(12),
+    refetchInterval: 5_000,
+  });
 
   const { data: user } = useQuery({
     queryKey: ["me"],
@@ -26,16 +30,19 @@ export function ActivitySidebar() {
           Recent activity
         </h2>
         <ul className="space-y-1.5">
-          {events.slice(0, 6).map((event) => (
-            <li key={event.id} className="flex items-start gap-2">
+          {(events ?? []).slice(0, 6).map((event) => (
+            <li
+              key={`${event.documentId}-${event.eventType}-${event.createdAt}`}
+              className="flex items-start gap-2"
+            >
               <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />
               <div className="min-w-0">
                 <p className="truncate text-caption text-content-primary">
-                  {event.fileName}
+                  {event.message ?? event.eventType}
                 </p>
                 <p className="text-caption text-content-muted">
                   {event.eventType.replaceAll("_", " ").toLowerCase()} ·{" "}
-                  {relativeTime(event.timestamp)}
+                  {relativeTime(event.createdAt)}
                 </p>
               </div>
             </li>

@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
-import { Search, Moon, Sun, Keyboard, Bell } from "lucide-react";
+import { Search, Moon, Sun, Keyboard, Bell, LogOut } from "lucide-react";
 import { useUiStore } from "@/stores/uiStore";
+import { useAuthStore } from "@/stores/authStore";
 
 const TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -20,6 +21,8 @@ export function TopBar() {
   const setShortcutsOpen = useUiStore((s) => s.setShortcutsOpen);
   const theme = useUiStore((s) => s.theme);
   const toggleTheme = useUiStore((s) => s.toggleTheme);
+  const logout = useAuthStore((s) => s.logout);
+  const email = useAuthStore((s) => s.session?.email ?? "");
 
   const title =
     TITLES[pathname] ??
@@ -81,10 +84,21 @@ export function TopBar() {
             <Moon className="h-4 w-4" />
           )}
         </button>
+        <button
+          type="button"
+          onClick={logout}
+          aria-label="Sign out"
+          className="rounded-lg p-2 text-content-muted hover:bg-surface-raised hover:text-content-primary"
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
       </div>
 
-      <div className="ml-1 flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-brand to-purple-500 text-caption font-semibold text-white">
-        D
+      <div
+        title={email}
+        className="ml-1 flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-brand to-purple-500 text-caption font-semibold uppercase text-white"
+      >
+        {email.charAt(0) || "?"}
       </div>
     </header>
   );

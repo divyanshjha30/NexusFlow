@@ -7,19 +7,12 @@ import { CloudDot } from "@/components/ui/CloudDot";
 import { cn, formatBytes } from "@/lib/utils";
 import type { CloudProvider } from "@/types";
 
-/** Published per-GB-month list prices for the standard storage tier. */
+/** Published list prices per GB-month for the standard tier. */
 const RATE_PER_GB: Record<CloudProvider, number> = {
   AWS: 0.023,
   AZURE: 0.0184,
   GCP: 0.02,
   OCI: 0.0255,
-};
-
-const ARCHIVE_RATE: Record<CloudProvider, number> = {
-  AWS: 0.004,
-  AZURE: 0.00099,
-  GCP: 0.0012,
-  OCI: 0.0026,
 };
 
 const CLOUDS: CloudProvider[] = ["AWS", "AZURE", "GCP", "OCI"];
@@ -30,35 +23,33 @@ const BAR_COLOR: Record<CloudProvider, string> = {
   OCI: "bg-cloud-oci",
 };
 
-const BYTES_PER_OBJECT = 17_000;
+const GB = 1024 ** 3;
 
 export function Costs() {
   const [months, setMonths] = useState(12);
 
-  const { data: health } = useQuery({
-    queryKey: ["cloud-health"],
-    queryFn: () => api.getCloudHealth(),
+  const { data: stats } = useQuery({
+    queryKey: ["stats"],
+    queryFn: () => api.getStats(),
   });
 
   const rows = CLOUDS.map((cloud) => {
-    const objects = health?.[cloud]?.objectCount ?? 0;
-    const bytes = objects * BYTES_PER_OBJECT;
-    const gb = bytes / 1024 ** 3;
-    const archived = cloud === "OCI";
-    const rate = archived ? ARCHIVE_RATE[cloud] : RATE_PER_GB[cloud];
+    const usage = stats?.perCloud?.[cloud];
+    const bytes = usage?.bytes ?? 0;
+    const gb = bytes / GB;
+    const rate = RATE_PER_GB[cloud];
     return {
       cloud,
-      objects,
+      objects: usage?.objects ?? 0,
       bytes,
       gb,
       rate,
-      archived,
       monthly: gb * rate,
     };
   });
 
   const monthlyTotal = rows.reduce((sum, r) => sum + r.monthly, 0);
-  const maxMonthly = Math.max(...rows.map((r) => r.monthly), 0.0001);
+  const maxMonthly = Math.max(...rows.map((r) => r.monthly), Number.EPSILON);
   const projected = monthlyTotal * months;
 
   return (
@@ -67,7 +58,7 @@ export function Costs() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Costs</h1>
           <p className="text-small text-content-secondary">
-            Storage spend projected from live object counts and list prices.
+            Storage spend modelled from your actual replicated bytes.
           </p>
         </div>
         <div className="flex gap-1.5">
@@ -88,19 +79,17 @@ export function Costs() {
         <StatCard
           label="Monthly run rate"
           value={monthlyTotal}
-          format={(n) => `$${n.toFixed(4)}`}
+          format={(n) => `$${n.toFixed(5)}`}
           icon={Wallet}
-          points={[2, 3, 3, 5, 6, 8, 9]}
         />
         <StatCard
           label={`Projected ${months}mo`}
           value={projected}
-          format={(n) => `$${n.toFixed(3)}`}
+          format={(n) => `$${n.toFixed(4)}`}
           icon={TrendingUp}
-          points={[1, 2, 4, 6, 9, 13, 18]}
         />
         <StatCard
-          label="Total stored"
+          label="Bytes replicated"
           value={rows.reduce((s, r) => s + r.bytes, 0)}
           format={formatBytes}
         />
@@ -120,12 +109,11 @@ export function Costs() {
             <div key={row.cloud} className="space-y-2 px-3 py-3">
               <div className="flex flex-wrap items-center gap-3">
                 <CloudDot cloud={row.cloud} />
-                {row.archived && <span className="chip">archive tier</span>}
                 <span className="ml-auto font-mono text-caption text-content-muted">
                   ${row.rate.toFixed(5)}/GB·mo
                 </span>
                 <span className="w-24 text-right font-mono text-small text-content-primary">
-                  ${row.monthly.toFixed(5)}
+                  ${row.monthly.toFixed(6)}
                 </span>
               </div>
 
@@ -140,8 +128,7 @@ export function Costs() {
               </div>
 
               <p className="text-caption text-content-muted">
-                {row.objects} objects · {formatBytes(row.bytes)} ·{" "}
-                {(row.gb * 1024).toFixed(1)} MB billable
+                {row.objects} objects · {formatBytes(row.bytes)}
               </p>
             </div>
           ))}
@@ -152,16 +139,16 @@ export function Costs() {
             Total
           </span>
           <span className="font-mono text-small text-content-primary">
-            ${monthlyTotal.toFixed(5)}/mo
+            ${monthlyTotal.toFixed(6)}/mo
           </span>
         </div>
       </section>
 
       <p className="flex items-start gap-2 text-caption text-content-muted">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        Estimates cover storage only — request, egress and AI inference charges
-        are excluded. Local floci usage is free; these figures model the
-        equivalent spend against real provider list prices.
+        Storage only — request, egress and AI inference charges are excluded.
+        Local floci usage is free; these figures model the equivalent spend
+        against real provider list prices.
       </p>
     </div>
   );

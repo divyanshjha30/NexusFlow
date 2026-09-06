@@ -6,6 +6,7 @@ import type {
   ProcessingEvent,
   UploadItem,
 } from "@/types";
+import { toast } from "./toastStore";
 
 const CLOUD_BY_EVENT: Record<string, CloudProvider> = {
   STORED_AWS: "AWS",
@@ -26,65 +27,52 @@ interface UploadStore {
   clearCompleted: () => void;
 }
 
-/** Drives the demo progression when no backend events arrive. */
-function simulate(documentId: string, apply: (e: ProcessingEvent) => void) {
-  const steps: Array<[ProcessingEvent["eventType"], number, string]> = [
-    ["STORED_AWS", 25, "Stored to AWS S3 (1/4 clouds)"],
-    ["STORED_AZURE", 50, "Stored to Azure Blob (2/4 clouds)"],
-    ["STORED_GCP", 75, "Stored to GCP Storage (3/4 clouds)"],
-    ["STORED_OCI", 87, "Stored to OCI Object (4/4 clouds)"],
-    ["AI_STARTED", 90, "AI pipeline started"],
-    ["AI_CLASSIFIED", 93, "Classified as INVOICE"],
-    ["AI_SUMMARISED", 96, "Summary generated"],
-    ["AI_COMPLETE", 100, "Analysis complete"],
-  ];
-  steps.forEach(([eventType, progress, message], i) => {
-    setTimeout(
-      () =>
-        apply({
-          documentId,
-          eventType,
-          progress,
-          message,
-          timestamp: new Date().toISOString(),
-        }),
-      500 + i * 700,
-    );
-  });
-}
-
 export const useUploadStore = create<UploadStore>((set, get) => ({
   items: [],
 
   async addFiles(files) {
     for (const file of files) {
-      const { documentId } = await api.uploadDocument(file);
-      const item: UploadItem = {
-        documentId,
-        fileName: file.name,
-        fileSizeBytes: file.size,
-        progress: 0,
-        status: "UPLOADING",
-        clouds: { AWS: false, AZURE: false, GCP: false, OCI: false },
-      };
-      set((s) => ({ items: [item, ...s.items] }));
-      simulate(documentId, get().applyEvent);
+      try {
+        const { documentId } = await api.uploadDocument(file);
+        const item: UploadItem = {
+          documentId,
+          fileName: file.name,
+          fileSizeBytes: file.size,
+          progress: 0,
+          status: "UPLOADING",
+          clouds: { AWS: false, AZURE: false, GCP: false, OCI: false },
+        };
+        set((s) => ({ items: [item, ...s.items] }));
+      } catch (e) {
+        toast.error(
+          `Upload failed: ${file.name}`,
+          e instanceof Error ? e.message : "Unknown error",
+        );
+      }
     }
   },
 
   applyEvent(event) {
+    const item = get().items.find((i) => i.documentId === event.documentId);
+
+    if (event.eventType === "AI_COMPLETE" && item) {
+      toast.success("Processing complete", item.fileName);
+    }
+    if (event.eventType === "FAILED" && item) {
+      toast.error("Processing failed", event.message);
+    }
+
     set((s) => ({
-      items: s.items.map((item) => {
-        if (item.documentId !== event.documentId) return item;
+      items: s.items.map((existing) => {
+        if (existing.documentId !== event.documentId) return existing;
         const cloud = CLOUD_BY_EVENT[event.eventType];
-        const status = STATUS_BY_EVENT[event.eventType] ?? "PROCESSING";
         return {
-          ...item,
-          progress: Math.max(item.progress, event.progress),
-          status,
-          documentType:
-            event.eventType === "AI_CLASSIFIED" ? "INVOICE" : item.documentType,
-          clouds: cloud ? { ...item.clouds, [cloud]: true } : item.clouds,
+          ...existing,
+          progress: Math.max(existing.progress, event.progress),
+          status: STATUS_BY_EVENT[event.eventType] ?? "PROCESSING",
+          clouds: cloud
+            ? { ...existing.clouds, [cloud]: true }
+            : existing.clouds,
         };
       }),
     }));
