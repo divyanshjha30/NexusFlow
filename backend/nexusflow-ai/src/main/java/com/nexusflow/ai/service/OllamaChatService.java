@@ -56,7 +56,6 @@ public class OllamaChatService {
 
             HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/api/generate"))
                     .header("Content-Type", "application/json")
-                    .timeout(Duration.ofMinutes(2))
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
 
@@ -83,11 +82,24 @@ public class OllamaChatService {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.warn("Ollama call interrupted", e);
-            onToken.accept("Generation was interrupted.");
+            log.warn("Ollama call interrupted");
         } catch (Exception e) {
+            // A cancelled request surfaces as an IOException wrapping InterruptedException;
+            // that is the caller giving up, not the model being unreachable.
+            if (wasInterrupted(e)) {
+                Thread.currentThread().interrupt();
+                log.debug("Chat stream cancelled before completion");
+                return;
+            }
             log.warn("Ollama call failed ({}): {}", e.getClass().getSimpleName(), e.getMessage(), e);
             onToken.accept("The AI service is unreachable (" + e.getMessage() + ").");
         }
+    }
+
+    private static boolean wasInterrupted(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof InterruptedException) return true;
+        }
+        return Thread.currentThread().isInterrupted();
     }
 }

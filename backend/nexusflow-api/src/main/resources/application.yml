@@ -38,6 +38,11 @@ spring:
       pool:
         core-size: 4
         max-size: 12
+  mvc:
+    async:
+      # A local model streams for minutes; the 30s servlet default would cut
+      # the answer off mid-sentence.
+      request-timeout: ${ASYNC_REQUEST_TIMEOUT_MS:900000}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:dj-pc:9092}
     producer:
